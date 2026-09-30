@@ -44,19 +44,40 @@ function loadEnvFile(file: string) {
   }
 }
 
-function readConfig(): ProjectConfig {
-  if (!fs.existsSync(configPath)) {
-    throw new Error(
-      `${configPath} not found. Link the directory with "npx -y @insforge/cli link", ` +
-        'or set INSFORGE_* repository secrets when running from CI.',
-    );
-  }
-  const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Partial<ProjectConfig>;
+const REQUIRED_KEYS = ['project_id', 'api_key', 'oss_host'] as const;
 
-  const required: (keyof ProjectConfig)[] = ['project_id', 'api_key', 'oss_host'];
-  const missing = required.filter((key) => !config[key]);
+function readLinkedConfig(): Partial<ProjectConfig> {
+  if (!fs.existsSync(configPath)) return {};
+  return JSON.parse(fs.readFileSync(configPath, 'utf8')) as Partial<ProjectConfig>;
+}
+
+/**
+ * Prefers the linked project config, and falls back to environment variables so the
+ * same script runs in CI (where `.insforge/` is gitignored) without any setup step.
+ */
+function readConfig(): ProjectConfig {
+  const linked = readLinkedConfig();
+
+  const config: Partial<ProjectConfig> = {
+    ...linked,
+    project_id: linked.project_id || process.env.INSFORGE_PROJECT_ID,
+    api_key: linked.api_key || process.env.INSFORGE_API_KEY,
+    oss_host: linked.oss_host || process.env.INSFORGE_URL,
+  };
+
+  if (config.oss_host && !config.appkey) {
+    const [appkey, region] = new URL(config.oss_host).hostname.split('.');
+    config.appkey = appkey;
+    config.region = region;
+  }
+
+  const missing = REQUIRED_KEYS.filter((key) => !config[key]);
   if (missing.length > 0) {
-    throw new Error(`${configPath} is missing: ${missing.join(', ')}`);
+    throw new Error(
+      `Missing InsForge config: ${missing.map((k) => `INSFORGE_${k.replace(/^oss_host$/, 'URL').toUpperCase()}`).join(', ')}\n` +
+        'Locally: run "npx -y @insforge/cli link" in this directory.\n' +
+        'In CI: set the INSFORGE_PROJECT_ID, INSFORGE_API_KEY and INSFORGE_URL secrets.',
+    );
   }
 
   return config as ProjectConfig;
@@ -124,7 +145,7 @@ async function main() {
   loadEnvFile(path.join(root, '.env'));
   const config = readConfig();
 
-  console.log(`Project: ${config.project_name ?? config.project_id} (${config.project_id})`);
+  console.log(`Project: ${config.project_name ?? 'personal-crm'} (${config.project_id})`);
   console.log(`URL:     ${config.oss_host}`);
 
   await ensureActive(config);
