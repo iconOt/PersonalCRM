@@ -1,0 +1,25 @@
+# InsForge project link (contains the admin API key)
+.insforge
+
+# Environment files
+.env
+.env.local
+.env*.local
+!.env.example
+
+node_modules
+dist
+
+# InsForge & AI agent skills
+.agent
+.agents
+.augment
+.claude
+.cline
+.github/copilot*
+.kilocode
+.qoder
+.qwen
+.roo
+.trae
+.windsurf

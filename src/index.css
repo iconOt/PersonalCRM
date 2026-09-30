@@ -1,0 +1,177 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-amber: #ecad0a;
+  --color-blue: #209dd7;
+  --color-purple: #753991;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #f8f9fa;
+  color: #1a1a2e;
+}
+
+.dark body,
+body.dark-mode {
+  background-color: #111827;
+  color: #f3f4f6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+.btn-primary {
+  @apply px-4 py-2 rounded-lg font-medium transition-colors duration-150;
+  background-color: #209dd7;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #1a85b8;
+}
+
+.btn-secondary {
+  @apply px-4 py-2 rounded-lg font-medium border transition-colors duration-150;
+  border-color: #d1d5db;
+  color: #374151;
+  background-color: white;
+}
+
+.dark .btn-secondary {
+  border-color: #4b5563;
+  color: #d1d5db;
+  background-color: #1f2937;
+}
+
+.btn-secondary:hover {
+  background-color: #f3f4f6;
+}
+
+.dark .btn-secondary:hover {
+  background-color: #374151;
+}
+
+.btn-danger {
+  @apply px-4 py-2 rounded-lg font-medium transition-colors duration-150;
+  background-color: #dc2626;
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #b91c1c;
+}
+
+.input {
+  @apply px-3 py-2 border rounded-lg outline-none transition-colors duration-150;
+  border-color: #d1d5db;
+  background-color: white;
+  color: #1a1a2e;
+}
+
+.dark .input {
+  border-color: #4b5563;
+  background-color: #1f2937;
+  color: #f3f4f6;
+}
+
+.input:focus {
+  border-color: #209dd7;
+  box-shadow: 0 0 0 2px rgba(32, 157, 215, 0.15);
+}
+
+.badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.badge-lead {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.dark .badge-lead {
+  background-color: #78350f;
+  color: #fef3c7;
+}
+
+.badge-qualified {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.dark .badge-qualified {
+  background-color: #1e3a5f;
+  color: #bfdbfe;
+}
+
+.badge-customer {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.dark .badge-customer {
+  background-color: #064e3b;
+  color: #a7f3d0;
+}
+
+.badge-new {
+  background-color: #e0e7ff;
+  color: #3730a3;
+}
+
+.dark .badge-new {
+  background-color: #312e81;
+  color: #c7d2fe;
+}
+
+.badge-proposal {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.dark .badge-proposal {
+  background-color: #78350f;
+  color: #fef3c7;
+}
+
+.badge-negotiation {
+  background-color: #fce7f3;
+  color: #9d174d;
+}
+
+.dark .badge-negotiation {
+  background-color: #831843;
+  color: #fbcfe8;
+}
+
+.badge-won {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.dark .badge-won {
+  background-color: #064e3b;
+  color: #a7f3d0;
+}
+
+.badge-lost {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.dark .badge-lost {
+  background-color: #7f1d1d;
+  color: #fecaca;
+}

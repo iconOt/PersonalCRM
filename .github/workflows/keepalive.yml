@@ -1,0 +1,73 @@
+name: InsForge keep-alive
+
+# InsForge pauses free projects after 1 week of inactivity (insforge.dev/pricing).
+# This runs daily so the project is never idle long enough to be paused.
+#
+# The trigger has to live outside InsForge: schedules run inside Postgres via
+# pg_cron, which cannot fire while the project is stopped.
+#
+# Required repository secrets (Settings > Secrets and variables > Actions):
+#   INSFORGE_PROJECT_ID     from .insforge/project.json -> project_id
+#   INSFORGE_URL            from .insforge/project.json -> oss_host
+#   INSFORGE_API_KEY        from .insforge/project.json -> api_key
+#   INSFORGE_ACCESS_TOKEN   ~/.insforge/credentials.json -> access_token (optional,
+#                           enables the pause check and auto-restore)
+
+on:
+  schedule:
+    - cron: '23 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: insforge-keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    name: Daily ping
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write .insforge/project.json from secrets
+        env:
+          INSFORGE_PROJECT_ID: ${{ secrets.INSFORGE_PROJECT_ID }}
+          INSFORGE_URL: ${{ secrets.INSFORGE_URL }}
+          INSFORGE_API_KEY: ${{ secrets.INSFORGE_API_KEY }}
+        run: |
+          mkdir -p .insforge
+          node -e '
+            const fs = require("fs");
+            const url = process.env.INSFORGE_URL;
+            const [appkey, region] = new URL(url).hostname.split(".");
+            const config = {
+              project_id: process.env.INSFORGE_PROJECT_ID,
+              project_name: "personal-crm",
+              org_id: "",
+              appkey,
+              region,
+              api_key: process.env.INSFORGE_API_KEY,
+              oss_host: url,
+            };
+            for (const key of ["project_id", "api_key", "oss_host"]) {
+              if (!config[key]) throw new Error(`missing secret: INSFORGE_${key.toUpperCase()}`);
+            }
+            fs.writeFileSync(".insforge/project.json", JSON.stringify(config, null, 2));
+          '
+
+      - name: Run keep-alive
+        env:
+          INSFORGE_ACCESS_TOKEN: ${{ secrets.INSFORGE_ACCESS_TOKEN }}
+        run: npm run keepalive
