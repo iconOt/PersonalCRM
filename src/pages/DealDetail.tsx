@@ -1,40 +1,60 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { DEAL_STAGE_LABELS, ACTIVITY_TYPES } from '../types';
+import { ErrorState, InlineError, LoadingState } from '../components/States';
 
 export default function DealDetail() {
   const { id } = useParams();
   const [deal, setDeal] = useState<any>(null);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [activityForm, setActivityForm] = useState({ type: 'note', description: '', due_date: '' });
+  const [error, setError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
 
-  const load = () => {
-    if (id) api.deals.get(id).then(setDeal);
-  };
+  const load = useCallback(async () => {
+    if (!id) return;
+    try {
+      setDeal(await api.deals.get(id));
+      setError(null);
+    } catch (e) {
+      setError(e);
+    }
+  }, [id]);
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); }, [load]);
 
   const handleAddActivity = async (e: React.FormEvent) => {
     e.preventDefault();
-    await api.activities.create({
-      type: activityForm.type,
-      deal_id: id,
-      contact_id: deal.contact_id,
-      description: activityForm.description,
-      due_date: activityForm.due_date || null,
-    });
-    setShowActivityModal(false);
-    setActivityForm({ type: 'note', description: '', due_date: '' });
-    load();
+    setActionError(null);
+    try {
+      await api.activities.create({
+        type: activityForm.type,
+        deal_id: id,
+        contact_id: deal.contact_id,
+        description: activityForm.description,
+        due_date: activityForm.due_date || null,
+      });
+      setShowActivityModal(false);
+      setActivityForm({ type: 'note', description: '', due_date: '' });
+      await load();
+    } catch (err) {
+      setActionError(err);
+    }
   };
 
   const toggleDone = async (activityId: string) => {
-    await api.activities.toggle(activityId);
-    load();
+    setActionError(null);
+    try {
+      await api.activities.toggle(activityId);
+      await load();
+    } catch (err) {
+      setActionError(err);
+    }
   };
 
-  if (!deal) return <div className="text-center py-12 text-gray-500 dark:text-gray-400">Loading...</div>;
+  if (error) return <ErrorState error={error} onRetry={load} title="Could not load this deal" />;
+  if (!deal) return <LoadingState />;
 
   return (
     <div>
@@ -108,6 +128,7 @@ export default function DealDetail() {
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-md shadow-xl border border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Log Activity</h2>
             <form onSubmit={handleAddActivity}>
+              {actionError != null && <div className="mb-3"><InlineError error={actionError} /></div>}
               <div className="space-y-3">
                 <select className="input w-full" value={activityForm.type} onChange={(e) => setActivityForm({ ...activityForm, type: e.target.value })}>
                   {ACTIVITY_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}

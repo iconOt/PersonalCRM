@@ -1,16 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
+import { DEAL_STAGE_LABELS } from '../types';
+import { ErrorState, LoadingState } from '../components/States';
 
 export default function OrganizationDetail() {
   const { id } = useParams();
   const [org, setOrg] = useState<any>(null);
+  const [error, setError] = useState<unknown>(null);
 
-  useEffect(() => {
-    if (id) api.organizations.get(id).then(setOrg);
+  const load = useCallback(async () => {
+    if (!id) return;
+    try {
+      setOrg(await api.organizations.get(id));
+      setError(null);
+    } catch (e) {
+      setError(e);
+    }
   }, [id]);
 
-  if (!org) return <div className="text-center py-12 text-gray-500 dark:text-gray-400">Loading...</div>;
+  useEffect(() => { load(); }, [load]);
+
+  if (error) return <ErrorState error={error} onRetry={load} title="Could not load this organization" />;
+  if (!org) return <LoadingState />;
 
   return (
     <div>
@@ -49,8 +61,8 @@ export default function OrganizationDetail() {
                 <Link key={d.id} to={`/deals/${d.id}`} className="block py-2 px-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 border border-gray-100 dark:border-gray-700/50">
                   <p className="text-sm font-medium text-brand-blue">{d.name}</p>
                   <p className="text-xs text-gray-400 dark:text-gray-500">
-                    <span className={`badge badge-${d.stage}`}>{d.stage}</span>
-                    {' · '}${d.value?.toLocaleString()} · {d.contact_name}
+                    <span className={`badge badge-${d.stage}`}>{DEAL_STAGE_LABELS[d.stage] ?? d.stage}</span>
+                    {' · '}${d.value?.toLocaleString()} · {d.contact_name || '—'}
                   </p>
                 </Link>
               ))}

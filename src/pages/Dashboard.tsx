@@ -1,18 +1,40 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { ErrorState, LoadingState } from '../components/States';
+
+/**
+ * due_date is a Postgres `date`, returned as "YYYY-MM-DD". Parsing that with plain
+ * `new Date(...)` yields UTC midnight, which is the previous day in every negative
+ * UTC offset and so flagged tasks due today as overdue. Pin both sides to local time.
+ */
+function isPastDue(dueDate: string, done: boolean): boolean {
+  if (done) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(`${dueDate}T00:00:00`).getTime() < today.getTime();
+}
 
 export default function Dashboard() {
   const [stats, setStats] = useState<any>(null);
+  const [error, setError] = useState<unknown>(null);
   const { dark } = useTheme();
 
-  useEffect(() => {
-    api.dashboard.stats().then(setStats);
+  const load = useCallback(async () => {
+    try {
+      setStats(await api.dashboard.stats());
+      setError(null);
+    } catch (e) {
+      setError(e);
+    }
   }, []);
 
-  if (!stats) return <div className="text-center py-12 text-gray-500 dark:text-gray-400">Loading...</div>;
+  useEffect(() => { load(); }, [load]);
+
+  if (error) return <ErrorState error={error} onRetry={load} title="Could not load the dashboard" />;
+  if (!stats) return <LoadingState />;
 
   const formatCurrency = (val: number) => `$${val.toLocaleString()}`;
 
@@ -91,14 +113,21 @@ export default function Dashboard() {
           {stats.tasks.length > 0 ? (
             <div className="space-y-2">
               {stats.tasks.map((t: any) => {
-                const isOverdue = !t.done && new Date(t.due_date) < new Date(new Date().toDateString());
+                const isOverdue = isPastDue(t.due_date, t.done);
                 return (
                   <div key={t.id} className={`flex items-center gap-3 py-2 px-3 rounded-lg ${isOverdue ? 'bg-red-50 dark:bg-red-900/20' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
                     <input
                       type="checkbox"
                       checked={t.done}
-                      readOnly
-                      className="h-4 w-4 rounded border-gray-300 dark:border-gray-600"
+                      onChange={async () => {
+                        try {
+                          await api.activities.toggle(t.id);
+                          await load();
+                        } catch (e) {
+                          setError(e);
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 cursor-pointer"
                     />
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm ${t.done ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>{t.description}</p>

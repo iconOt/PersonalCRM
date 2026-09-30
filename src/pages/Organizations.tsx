@@ -1,40 +1,69 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
+import { ErrorState, InlineError } from '../components/States';
 
 export default function Organizations() {
   const [orgs, setOrgs] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editOrg, setEditOrg] = useState<any>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [saveError, setSaveError] = useState<unknown>(null);
   const [form, setForm] = useState({ name: '', website: '', industry: '', notes: '' });
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const load = () => api.organizations.list(search).then(setOrgs);
-
-  useEffect(() => { load(); }, [search]);
+  // `cancelled` discards a slow response that a newer keystroke has already superseded,
+  // so the table always reflects the term currently in the box.
+  useEffect(() => {
+    let cancelled = false;
+    api.organizations
+      .list(search)
+      .then((rows) => {
+        if (cancelled) return;
+        setOrgs(rows);
+        setError(null);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [search, reloadKey]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editOrg) {
-      await api.organizations.update(editOrg.id, form);
-    } else {
-      await api.organizations.create(form);
+    setSaveError(null);
+    try {
+      if (editOrg) {
+        await api.organizations.update(editOrg.id, form);
+      } else {
+        await api.organizations.create(form);
+      }
+      setShowModal(false);
+      setEditOrg(null);
+      setForm({ name: '', website: '', industry: '', notes: '' });
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setSaveError(err);
     }
-    setShowModal(false);
-    setEditOrg(null);
-    setForm({ name: '', website: '', industry: '', notes: '' });
-    load();
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Delete this organization?')) {
+    if (!confirm('Delete this organization?')) return;
+    setError(null);
+    try {
       await api.organizations.delete(id);
-      load();
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err);
     }
   };
 
   const openEdit = (org: any) => {
     setEditOrg(org);
+    setSaveError(null);
     setForm({ name: org.name, website: org.website, industry: org.industry, notes: org.notes });
     setShowModal(true);
   };
@@ -61,6 +90,9 @@ export default function Organizations() {
         />
       </div>
 
+      {error ? (
+        <ErrorState error={error} onRetry={() => setReloadKey((k) => k + 1)} title="Could not load organizations" />
+      ) : (
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         <table className="w-full">
           <thead>
@@ -93,12 +125,14 @@ export default function Organizations() {
           </tbody>
         </table>
       </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-md shadow-xl border border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">{editOrg ? 'Edit Organization' : 'Add Organization'}</h2>
             <form onSubmit={handleSubmit}>
+              {saveError != null && <div className="mb-3"><InlineError error={saveError} /></div>}
               <div className="space-y-3">
                 <input className="input w-full" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
                 <input className="input w-full" placeholder="Website" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} />

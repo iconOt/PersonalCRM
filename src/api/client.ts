@@ -118,7 +118,7 @@ async function listActivities(filter?: { contactId?: string; dealId?: string }):
     .from('activities')
     .select(ACTIVITY_SELECT)
     .order('activity_date', { ascending: false })
-    .order('id', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(LIST_LIMIT);
 
   if (filter?.contactId) query = query.eq('contact_id', filter.contactId);
@@ -303,8 +303,9 @@ export const api = {
           .from('activities')
           .select(ACTIVITY_SELECT)
           .not('due_date', 'is', null)
+          .eq('done', false)
           .order('due_date', { ascending: true })
-          .order('id', { ascending: true })
+          .order('created_at', { ascending: true })
           .limit(LIST_LIMIT),
       );
       return rows.map(mapActivity);

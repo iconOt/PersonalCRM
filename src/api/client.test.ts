@@ -278,6 +278,31 @@ describe('Activities and tasks', () => {
     expect(dates).toEqual(['2026-06-01', '2026-01-01']);
   });
 
+  it('orders same-day activities newest first by creation time', async () => {
+    const contact = await makeContact();
+
+    // The detail pages do not send activity_date, so every activity logged through
+    // the UI lands on the same date. Ties must fall back to a monotonic column —
+    // ordering by the random-uuid primary key silently produced arbitrary order.
+    const seq: string[] = [];
+    for (let i = 1; i <= 5; i += 1) {
+      const created = await api.activities.create({
+        type: 'note',
+        contact_id: contact.id,
+        deal_id: null,
+        description: `seq ${i}`,
+        activity_date: '2026-09-30',
+      });
+      createdActivities.push(created.id);
+      seq.push(created.id);
+    }
+
+    const timeline = await api.activities.list(contact.id);
+    const order = timeline.filter((a) => seq.includes(a.id)).map((a) => seq.indexOf(a.id));
+
+    expect(order).toEqual([4, 3, 2, 1, 0]);
+  });
+
   it('toggles task completion', async () => {
     const contact = await makeContact();
     const contactId = contact.id;

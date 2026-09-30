@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { CONTACT_STATUSES, CONTACT_STATUS_LABELS } from '../types';
+import { ErrorState, InlineError } from '../components/States';
 
 export default function Contacts() {
   const [contacts, setContacts] = useState<any[]>([]);
@@ -11,35 +12,75 @@ export default function Contacts() {
   const [editContact, setEditContact] = useState<any>(null);
   const [orgs, setOrgs] = useState<any[]>([]);
   const [form, setForm] = useState({ name: '', email: '', phone: '', job_title: '', organization_id: '', status: 'lead' });
+  const [error, setError] = useState<unknown>(null);
+  const [saveError, setSaveError] = useState<unknown>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const load = () => api.contacts.list(search, statusFilter).then(setContacts);
+  // `cancelled` discards a response that a newer keystroke or filter change has already
+  // superseded, so the table always reflects the current search and status.
+  useEffect(() => {
+    let cancelled = false;
+    api.contacts
+      .list(search, statusFilter)
+      .then((rows) => {
+        if (cancelled) return;
+        setContacts(rows);
+        setError(null);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [search, statusFilter, reloadKey]);
 
-  useEffect(() => { load(); }, [search, statusFilter]);
-  useEffect(() => { api.organizations.list().then(setOrgs); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    api.organizations
+      .list()
+      .then((rows) => {
+        if (!cancelled) setOrgs(rows);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaveError(null);
     const data = { ...form, organization_id: form.organization_id || null };
-    if (editContact) {
-      await api.contacts.update(editContact.id, data);
-    } else {
-      await api.contacts.create(data);
+    try {
+      if (editContact) {
+        await api.contacts.update(editContact.id, data);
+      } else {
+        await api.contacts.create(data);
+      }
+      setShowModal(false);
+      setEditContact(null);
+      setForm({ name: '', email: '', phone: '', job_title: '', organization_id: '', status: 'lead' });
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setSaveError(err);
     }
-    setShowModal(false);
-    setEditContact(null);
-    setForm({ name: '', email: '', phone: '', job_title: '', organization_id: '', status: 'lead' });
-    load();
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Delete this contact?')) {
+    if (!confirm('Delete this contact?')) return;
+    setError(null);
+    try {
       await api.contacts.delete(id);
-      load();
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err);
     }
   };
 
   const openEdit = (c: any) => {
     setEditContact(c);
+    setSaveError(null);
     setForm({
       name: c.name, email: c.email, phone: c.phone, job_title: c.job_title,
       organization_id: c.organization_id || '', status: c.status
@@ -79,6 +120,9 @@ export default function Contacts() {
         </select>
       </div>
 
+      {error ? (
+        <ErrorState error={error} onRetry={() => setReloadKey((k) => k + 1)} title="Could not load contacts" />
+      ) : (
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         <table className="w-full">
           <thead>
@@ -115,12 +159,14 @@ export default function Contacts() {
           </tbody>
         </table>
       </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-md shadow-xl border border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">{editContact ? 'Edit Contact' : 'Add Contact'}</h2>
             <form onSubmit={handleSubmit}>
+              {saveError != null && <div className="mb-3"><InlineError error={saveError} /></div>}
               <div className="space-y-3">
                 <input className="input w-full" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
                 <input className="input w-full" type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />

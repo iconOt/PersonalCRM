@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { DEAL_STAGES, DEAL_STAGE_LABELS } from '../types';
+import { ErrorState, InlineError } from '../components/States';
 
 export default function Deals() {
   const [deals, setDeals] = useState<any[]>([]);
@@ -11,43 +12,75 @@ export default function Deals() {
   const [orgs, setOrgs] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [form, setForm] = useState({ name: '', organization_id: '', contact_id: '', stage: 'new', value: '', close_date: '' });
+  const [error, setError] = useState<unknown>(null);
+  const [saveError, setSaveError] = useState<unknown>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const load = () => api.deals.list(search).then(setDeals);
-
-  useEffect(() => { load(); }, [search]);
+  // `cancelled` discards a response that a newer keystroke has already superseded.
   useEffect(() => {
-    api.organizations.list().then(setOrgs);
-    api.contacts.list().then(setContacts);
+    let cancelled = false;
+    api.deals
+      .list(search)
+      .then((rows) => {
+        if (cancelled) return;
+        setDeals(rows);
+        setError(null);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [search, reloadKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.organizations.list().then((r) => { if (!cancelled) setOrgs(r); }).catch(() => undefined);
+    api.contacts.list().then((r) => { if (!cancelled) setContacts(r); }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaveError(null);
     const data = {
       ...form,
       organization_id: form.organization_id || null,
       contact_id: form.contact_id || null,
       value: form.value ? Number(form.value) : 0,
     };
-    if (editDeal) {
-      await api.deals.update(editDeal.id, data);
-    } else {
-      await api.deals.create(data);
+    try {
+      if (editDeal) {
+        await api.deals.update(editDeal.id, data);
+      } else {
+        await api.deals.create(data);
+      }
+      setShowModal(false);
+      setEditDeal(null);
+      setForm({ name: '', organization_id: '', contact_id: '', stage: 'new', value: '', close_date: '' });
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setSaveError(err);
     }
-    setShowModal(false);
-    setEditDeal(null);
-    setForm({ name: '', organization_id: '', contact_id: '', stage: 'new', value: '', close_date: '' });
-    load();
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Delete this deal?')) {
+    if (!confirm('Delete this deal?')) return;
+    setError(null);
+    try {
       await api.deals.delete(id);
-      load();
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      setError(err);
     }
   };
 
   const openEdit = (d: any) => {
     setEditDeal(d);
+    setSaveError(null);
     setForm({
       name: d.name,
       organization_id: d.organization_id || '',
@@ -81,6 +114,9 @@ export default function Deals() {
         />
       </div>
 
+      {error ? (
+        <ErrorState error={error} onRetry={() => setReloadKey((k) => k + 1)} title="Could not load deals" />
+      ) : (
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         <table className="w-full">
           <thead>
@@ -117,12 +153,14 @@ export default function Deals() {
           </tbody>
         </table>
       </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-md shadow-xl border border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">{editDeal ? 'Edit Deal' : 'Add Deal'}</h2>
             <form onSubmit={handleSubmit}>
+              {saveError != null && <div className="mb-3"><InlineError error={saveError} /></div>}
               <div className="space-y-3">
                 <input className="input w-full" placeholder="Deal Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
                 <select className="input w-full" value={form.organization_id} onChange={(e) => setForm({ ...form, organization_id: e.target.value })}>

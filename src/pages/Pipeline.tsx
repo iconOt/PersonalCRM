@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { api } from '../api/client';
 import { DEAL_STAGES, DEAL_STAGE_LABELS } from '../types';
+import { ErrorState, InlineError, LoadingState } from '../components/States';
 
 interface DealsByStage {
   [key: string]: any[];
@@ -10,20 +11,29 @@ interface DealsByStage {
 
 export default function Pipeline() {
   const [dealsByStage, setDealsByStage] = useState<DealsByStage>({});
+  const [error, setError] = useState<unknown>(null);
+  const [loaded, setLoaded] = useState(false);
 
-  const load = async () => {
-    const allDeals = await api.deals.list();
-    const grouped: DealsByStage = {};
-    DEAL_STAGES.forEach((s) => { grouped[s] = []; });
-    allDeals.forEach((d: any) => {
-      if (grouped[d.stage]) {
-        grouped[d.stage].push(d);
-      }
-    });
-    setDealsByStage(grouped);
-  };
+  const load = useCallback(async () => {
+    try {
+      const allDeals = await api.deals.list();
+      const grouped: DealsByStage = {};
+      DEAL_STAGES.forEach((s) => { grouped[s] = []; });
+      allDeals.forEach((d: any) => {
+        if (grouped[d.stage]) {
+          grouped[d.stage].push(d);
+        }
+      });
+      setDealsByStage(grouped);
+      setError(null);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const onDragEnd = async (result: DropResult) => {
     const { source, destination, draggableId } = result;
@@ -38,23 +48,33 @@ export default function Pipeline() {
       const sourceList = [...(updated[source.droppableId] || [])];
       const destList = source.droppableId === destination.droppableId ? sourceList : [...(updated[destination.droppableId] || [])];
       const [moved] = sourceList.splice(source.index, 1);
-      destList.splice(destination.index, 0, moved);
+      // Keep the local copy's own stage in step with the move, otherwise the board
+      // disagrees with the database until the next reload.
+      destList.splice(destination.index, 0, { ...moved, stage: newStage });
       updated[source.droppableId] = sourceList;
       updated[destination.droppableId] = destList;
       return updated;
     });
 
+    setError(null);
     try {
-      const deal = await api.deals.get(dealId);
-      await api.deals.update(dealId, { ...deal, stage: newStage });
-    } catch {
-      load();
+      await api.deals.update(dealId, { stage: newStage });
+    } catch (e) {
+      // The stage change did not save — put the deal back where the database still has it.
+      setError(e);
+      await load();
     }
   };
+
+  if (!loaded) return <LoadingState />;
+  if (error && Object.keys(dealsByStage).length === 0) {
+    return <ErrorState error={error} onRetry={load} title="Could not load the pipeline" />;
+  }
 
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Pipeline</h1>
+      {error != null && <div className="mb-4"><InlineError error={error} /></div>}
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="flex gap-4 overflow-x-auto pb-4">
           {DEAL_STAGES.map((stage) => (
